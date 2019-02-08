@@ -1,0 +1,7 @@
+[package]
+name = "licgen"
+version = "0.1.0"
+authors = ["William Drescher"]
+edition = "2018"
+
+[dependencies]

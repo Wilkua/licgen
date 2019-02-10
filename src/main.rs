@@ -1,4 +1,8 @@
 use std::{env, process, time};
+use std::io::prelude::*;
+
+use base64;
+use sodiumoxide::crypto::sign;
 
 #[derive(Debug)]
 struct Feature {
@@ -6,6 +10,8 @@ struct Feature {
     valid_from: u64,
     valid_thru: u64,
 }
+
+const LIC_VERSION: u16 = 1;
 
 fn main() {
     let created_time = time::SystemTime::now()
@@ -62,6 +68,35 @@ fn main() {
         features.push(Feature { id, valid_from, valid_thru });
     };
 
-    println!("{:?}", features);
+    features.sort_unstable_by(|a, b| a.id.cmp(&b.id));
+    let feature_count = features.len();
+    // Index
+    //   version -> 2 bytes
+    //   for n features:
+    //     id         -> 2 bytes
+    //     offset     -> 4 bytes
+    // Entries
+    //   for n features:
+    //     valid_from -> 8 bytes
+    //     valid_thru -> 8 bytes
+    let mut lic_bytes: Vec<u8> = Vec::with_capacity((feature_count * 22) + 2);
+    let _ = lic_bytes.write(&LIC_VERSION.to_le_bytes());
+    for (idx, f) in features.iter().enumerate() {
+        // write the ID to the index table
+        let _ = lic_bytes.write(&f.id.to_le_bytes());
+        // write the offset to the index table
+        let _ = lic_bytes.write(&(idx as u32 * 8u32).to_le_bytes());
+    }
+    for f in features.iter() {
+        // write timestamps to data block
+        let _ = lic_bytes.write(&f.valid_from.to_le_bytes());
+        let _ = lic_bytes.write(&f.valid_thru.to_le_bytes());
+    }
+
+    let (_pk, sk) = sign::gen_keypair();
+    let signed_data = sign::sign(&lic_bytes.as_slice(), &sk);
+    let signed_data = base64::encode_config(&signed_data, base64::STANDARD);
+
+    println!("{}", signed_data);
 }
 

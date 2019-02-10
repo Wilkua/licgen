@@ -5,3 +5,5 @@ authors = ["William Drescher"]
 edition = "2018"
 
 [dependencies]
+sodiumoxide = "0.2.0"
+base64 = "0.10.1"

@@ -1,10 +1,9 @@
 use std::{env, process, time};
-use std::io::prelude::*;
+use std::io::{self, Read, Write};
 
 use base64;
 use sodiumoxide::crypto::sign;
 
-#[derive(Debug)]
 struct Feature {
     id: u16,
     valid_from: u64,
@@ -85,7 +84,7 @@ fn main() {
         // write the ID to the index table
         let _ = lic_bytes.write(&f.id.to_le_bytes());
         // write the offset to the index table
-        let _ = lic_bytes.write(&(idx as u32 * 8u32).to_le_bytes());
+        let _ = lic_bytes.write(&(idx as u32 * 16u32).to_le_bytes());
     }
     for f in features.iter() {
         // write timestamps to data block
@@ -93,7 +92,32 @@ fn main() {
         let _ = lic_bytes.write(&f.valid_thru.to_le_bytes());
     }
 
-    let (_pk, sk) = sign::gen_keypair();
+    let mut key_data: Vec<u8> = Vec::new();
+    match io::stdin().read_to_end(&mut key_data) {
+        Err(_) => {
+            eprintln!("Failed reading STDIN for secret key");
+            process::exit(1);
+        },
+        _ => {},
+    };
+    // Knock the \r\n off the end of the byte stream
+    let _ = key_data.pop();
+    let _ = key_data.pop();
+    let key_data = match base64::decode_config(&key_data, base64::STANDARD) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("Failed to decode key data: {}", e);
+            process::exit(1);
+        },
+    };
+    let sk = sign::SecretKey::from_slice(&key_data.as_slice());
+    let sk = match sk {
+        Some(k) => k,
+        None => {
+            eprintln!("The provided secret key was not valid");
+            process::exit(1);
+        },
+    };
     let signed_data = sign::sign(&lic_bytes.as_slice(), &sk);
     let signed_data = base64::encode_config(&signed_data, base64::STANDARD);
 
